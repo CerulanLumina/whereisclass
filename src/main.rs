@@ -163,7 +163,20 @@ fn main() {
 
     let db = CourseDB { courses: coursevec };
 
-    serde_json::to_writer_pretty(File::create("201909.json").expect("Opening File"), &db).expect("Writing file");
+    db.courses.iter().filter(|course| course.sections.iter().any(|section| section.periods.iter().any(|period| period.time_start == "1000" && period.location == Some("SAGE 2715".into()) && period.days.contains(&models::Day::Tuesday))))
+        .for_each(|course| {
+            println!("{} - {} {}", course.name, course.dept, course.num);
+            course.sections.iter()
+                .filter(|section| section.periods.iter().any(|period| period.time_start == "1000" && period.location == Some("SAGE 2715".into()) && period.days.contains(&models::Day::Tuesday)))
+                .for_each(|section| {
+                    println!("\t[{}] ({})", section.num, section.crn);
+                    section.periods.iter()
+                        .filter(|period| period.time_start == "1000" && period.location == Some("SAGE 2715".into()) && period.days.contains(&models::Day::Tuesday))
+                        .for_each(|period| {
+                            println!("\t\t {} - {} @ {} on {:?}", period.time_start, period.time_end, period.location.as_ref().unwrap(), period.days);
+                        });
+                });
+        });
 
     res(Some(3)).unwrap();
 
