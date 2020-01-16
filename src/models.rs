@@ -23,14 +23,15 @@ pub struct Section {
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Period {
-    pub time_start: String,
-    pub time_end: String,
+    pub time_start: u16,
+    pub time_end: u16,
+    pub instructor: String,
     pub days: Vec<Day>,
     pub location: Option<String>,
     pub period_type: Option<PeriodType>,
 }
 
-#[derive(Clone, PartialEq, Debug, PartialOrd, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, PartialOrd, Serialize, Deserialize)]
 pub enum Day {
     Monday,
     Tuesday,
@@ -68,7 +69,12 @@ impl<S: AsRef<str>> From<S> for Day {
             "2" => Self::Wednesday,
             "3" => Self::Thursday,
             "4" => Self::Friday,
-            _ => panic!("Unknown day!!")
+            "M" => Self::Monday,
+            "T" => Self::Tuesday,
+            "W" => Self::Wednesday,
+            "R" => Self::Thursday,
+            "F" => Self::Friday,
+            x => panic!("Unknown day '{}'!!", x)
         }
     }
 }

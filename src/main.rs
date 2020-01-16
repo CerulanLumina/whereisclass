@@ -1,210 +1,125 @@
 #![feature(try_trait)]
 
-use roxmltree::{Document, Node};
+extern crate roxmltree;
+extern crate scraper;
 use std::io::Read;
 use std::fs::File;
 
 mod models;
+mod xml_parser;
+mod htmlparser;
+mod actions;
 
 use serde::{Deserialize, Serialize};
+use crate::models::*;
+use clap::{SubCommand, Arg};
 use std::str::FromStr;
-use crate::models::CourseDB;
-use std::num::ParseIntError;
-
-const VERBOSE: bool = false;
-
-fn parse_days(day: Node, day_vec: &mut Vec<models::Day>) -> Result<(), CourseDBError> {
-    let day = day.text()?.into();
-    day_vec.push(day);
-    Ok(())
-}
-
-fn parse_periods(period: Node, period_vec: &mut Vec<models::Period>) -> Result<(), CourseDBError> {
-    let time_regex = regex::Regex::new(r#"^\d+$"#).unwrap();
-    let time_start = period.attribute("start")?.to_string();
-    let time_end = period.attribute("end")?.to_string();
-
-    if !time_regex.is_match(time_start.as_str()) || !time_regex.is_match(time_end.as_str()) {
-        return Err(CourseDBError::MissingValue)
-    }
-
-    let location = period.attribute("location").map(|s| s.to_string());
-    let period_type = period.attribute("type").map(|s| s.into());
-    let mut days = Vec::new();
-    period.children()
-        .filter(|child| child.tag_name().name() == "DAY")
-        .for_each(|day| {
-            let res = parse_days(day, &mut days);
-            if res.is_err() && VERBOSE {
-                match res.unwrap_err() {
-                    CourseDBError::ParsingNum => eprintln!("Failed to parse day due to malformed number, XML: {:?}", day),
-                    CourseDBError::MissingValue => eprintln!("Failed to parse day due to empty value, XML: {:?}", day),
-                }
-            }
-        });
-
-    period_vec.push(models::Period {
-        time_start,
-        time_end,
-        location,
-        period_type,
-        days
-    });
-    Ok(())
-
-}
-
-fn parse_notes(note: Node, note_vec: &mut Vec<String>) -> Result<(), CourseDBError> {
-    note_vec.push(note.text()?.to_string());
-    Ok(())
-}
-
-fn parse_section(section: Node, section_vec: &mut Vec<models::Section>) -> Result<(), CourseDBError> {
-    let crn = section.attribute("crn")?;
-    let crn = u32::from_str(crn)?;
-    let num = section.attribute("num")?;
-    let num = u8::from_str(num)?;
-    let mut periods = Vec::new();
-    let mut notes = Vec::new();
-    section.children()
-        .filter(|child| child.tag_name().name() == "PERIOD")
-        .for_each(|period| {
-            let res = parse_periods(period, &mut periods);
-            if res.is_err() && VERBOSE {
-                match res.unwrap_err() {
-                    CourseDBError::ParsingNum => eprintln!("Failed to parse period due to malformed number, XML: {:?}", period),
-                    CourseDBError::MissingValue => eprintln!("Failed to parse period due to empty value, XML: {:?}", period),
-                }
-            }
-        });
-    section.children()
-        .filter(|course_child| course_child.tag_name().name() == "NOTE")
-        .for_each(|note| {
-            let res = parse_notes(note, &mut notes);
-            if res.is_err() && VERBOSE {
-                match res.unwrap_err() {
-                    CourseDBError::ParsingNum => eprintln!("Failed to parse note due to malformed number, XML: {:?}", note),
-                    CourseDBError::MissingValue => eprintln!("Failed to parse note due to empty value, XML: {:?}", note),
-                }
-            }
-        });
-
-    section_vec.push(models::Section {
-        crn,
-        num,
-        periods,
-        notes,
-    });
-
-    Ok(())
-
-}
-
-fn parse_course(course: Node, course_vec: &mut Vec<models::Course>) -> Result<(), CourseDBError> {
-    let name = course.attribute("name").expect("No name course").to_string();
-    let dept = course.attribute("dept").expect("No dept course").to_string();
-    let num = course.attribute("num").expect("no num course");
-    let num = u16::from_str(num).expect("Converting num to u16");
-
-    let mut sections = Vec::<models::Section>::new();
-
-    course.children()
-        .filter(|course_child| course_child.tag_name().name() == "SECTION")
-        .for_each(|section| {
-            let res = parse_section(section, &mut sections);
-            if res.is_err() && VERBOSE {
-                match res.unwrap_err() {
-                    CourseDBError::ParsingNum => eprintln!("Failed to parse section due to malformed number, XML: {:?}", section),
-                    CourseDBError::MissingValue => eprintln!("Failed to parse section due to empty value, XML: {:?}", section),
-                }
-            }
-        });
-
-    course_vec.push(models::Course {
-        name,
-        dept,
-        num,
-        sections,
-    });
-
-    Ok(())
-
-
-}
-
-fn res(s: Option<i32>) -> Result<(), CourseDBError> {
-    s?;
-    Ok(())
-}
+use regex::Regex;
+use std::path::Path;
+use crate::actions::FindCourseInRoomAtTime;
 
 fn main() {
-    let text = {
-        let mut file = File::open("201909.xml").expect("Opening file");
-        let mut text = String::new();
-        file.read_to_string(&mut text).expect("Reading file");
-        text
+
+    let app = clap::App::new("whereisclass");
+
+    let app = app
+        .subcommand(SubCommand::with_name("parsehtml")
+            .arg(Arg::with_name("file").required(true).help("Sets the html file to read from, following the SIS Table format").validator(verify_exists))
+            .arg(Arg::with_name("output").required(true).help("Sets the output JSON file")))
+        .subcommand(SubCommand::with_name("parsercos")
+            .arg(Arg::with_name("file").required(true).help("Sets the html file to read from, following the SIS Table format").validator(verify_exists))
+            .arg(Arg::with_name("output").required(true).help("Sets the output JSON file")))
+        .subcommand(SubCommand::with_name("find-course-in-room")
+            .arg(Arg::with_name("db").required(true).help("The JSON Course DB to scan").validator(verify_exists))
+            .arg(Arg::with_name("room").required(true).help("The SIS room name"))
+            .arg(Arg::with_name("time").required(true).help("The military time code").validator(verify_number))
+            .arg(Arg::with_name("day").required(true).help("The day").validator(verify_day)))
+        .subcommand(SubCommand::with_name("empty-rooms")
+            .arg(Arg::with_name("db").required(true).help("The JSON Course DB to scan").validator(verify_exists))
+            .arg(Arg::with_name("time-start").required(true).help("The start time").validator(verify_number))
+            .arg(Arg::with_name("time-end").required(true).help("The end time").validator(verify_number))
+            .arg(Arg::with_name("day").required(true).help("The day").validator(verify_day))
+        );
+
+    let matches = app.get_matches();
+    let (subcommand, subc_matches) = matches.subcommand();
+
+    let valid = match subcommand {
+        "parsehtml"|
+        "find-course-in-room"|
+        "empty-rooms"|
+        "parsercos" => true,
+        _ => false
     };
 
-    let mut coursevec = Vec::<models::Course>::new();
+    if !valid {
+        eprintln!("Invalid subcommand.");
+        std::process::exit(1);
+    }
 
-    let doc = Document::parse(text.as_str()).expect("Parsing XML");
-    doc.root_element()
-        .children()
-        .filter(|node| node.tag_name().name() == "COURSE")
-        .for_each(|course| {
-            let res = parse_course(course, &mut coursevec);
-            if res.is_err() && VERBOSE {
-                match res.unwrap_err() {
-                    CourseDBError::ParsingNum => eprintln!("Failed to parse course due to malformed number, XML: {:?}", course),
-                    CourseDBError::MissingValue => eprintln!("Failed to parse course due to empty value, XML: {:?}", course),
-                }
-            }
-        });
+    let subc_matches = subc_matches.unwrap();
 
-    let db = CourseDB { courses: coursevec };
-
-    db.courses.iter().filter(|course| course.sections.iter().any(|section| section.periods.iter().any(|period| period.time_start == "1000" && period.location == Some("SAGE 2715".into()) && period.days.contains(&models::Day::Tuesday))))
-        .for_each(|course| {
-            println!("{} - {} {}", course.name, course.dept, course.num);
-            course.sections.iter()
-                .filter(|section| section.periods.iter().any(|period| period.time_start == "1000" && period.location == Some("SAGE 2715".into()) && period.days.contains(&models::Day::Tuesday)))
-                .for_each(|section| {
-                    println!("\t[{}] ({})", section.num, section.crn);
-                    section.periods.iter()
-                        .filter(|period| period.time_start == "1000" && period.location == Some("SAGE 2715".into()) && period.days.contains(&models::Day::Tuesday))
-                        .for_each(|period| {
-                            println!("\t\t {} - {} @ {} on {:?}", period.time_start, period.time_end, period.location.as_ref().unwrap(), period.days);
-                        });
-                });
-        });
-
-    res(Some(3)).unwrap();
-
-//    println!("Hello, world!");
-}
-
-#[derive(Debug)]
-enum CourseDBError {
-    ParsingNum,
-    MissingValue,
-}
-
-impl std::error::Error for CourseDBError {}
-impl std::fmt::Display for CourseDBError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+    match subcommand {
+        "parsehtml" => parsehtml(subc_matches.value_of("file").unwrap(), subc_matches.value_of("output").unwrap()),
+        "parsercos" => parsercos(subc_matches.value_of("file").unwrap(), subc_matches.value_of("output").unwrap()),
+        "find-course-in-room" => find_course_in_room(subc_matches.value_of("db").unwrap(),
+                                                     subc_matches.value_of("room").unwrap(),
+                                                     subc_matches.value_of("time").unwrap(),
+                                                     subc_matches.value_of("day").unwrap()),
+        "empty-rooms" => empty_rooms(subc_matches.value_of("db").unwrap(),
+                                                     subc_matches.value_of("time-start").unwrap(),
+                                                     subc_matches.value_of("time-end").unwrap(),
+                                                     subc_matches.value_of("day").unwrap()),
+        _ => unimplemented!(),
     }
 }
 
-impl From<ParseIntError> for CourseDBError {
-    fn from(_: ParseIntError) -> Self {
-        Self::ParsingNum
+fn load_db(db_file: &str) -> CourseDB {
+    let f = File::open(db_file).expect("Opening file");
+    serde_json::from_reader(f).expect("Parsing CourseDB")
+}
+
+fn empty_rooms(db_file: &str, time_start: &str, time_end: &str, day: &str) {
+    let db = load_db(db_file)
+}
+
+fn find_course_in_room(db_file: &str, room: &str, time: &str, day: &str) {
+    println!("{} -- ", room);
+    let courses = load_db(db_file).find_course_in_room_at_time(room, time.parse().unwrap(), Day::from(day));
+    println!("Found the following course{}:", if courses.len() != 1 { "s" } else {""});
+    for course in courses {
+        println!("{} {} -- {}", course.dept, course.num, course.name);
     }
 }
 
-impl From<std::option::NoneError> for CourseDBError {
-    fn from(_: std::option::NoneError) -> Self {
-        Self::MissingValue
-    }
+fn parsehtml(input: &str, output: &str) {
+    std_parse(input, output, |s| htmlparser::parse_html(s))
 }
 
+fn parsercos(input: &str, output: &str) {
+    std_parse(input, output, |input| xml_parser::parse_db(input, false).expect("Parsing xml db"))
+}
+
+fn std_parse<F: FnOnce(&str) -> CourseDB>(input: &str, output: &str, parser: F) {
+    let mut f = File::open(input).expect("Opening file");
+    let mut fragment = String::new();
+    f.read_to_string(&mut fragment).expect("Reading file");
+    let db = parser(fragment.as_ref());
+    println!("Read {} courses", db.courses.len());
+    serde_json::to_writer_pretty(File::create(output).expect("Creating output file"), &db).expect("Writing output file");
+}
+
+fn verify_exists(input: String) -> Result<(), String> {
+    if Path::new(input.as_str()).is_file() { Ok(()) }
+    else { Err(String::from("File does not exist!")) }
+}
+
+fn verify_number(input: String) -> Result<(), String> {
+    u32::from_str(input.as_str()).map(|_| ()).map_err(|_| String::from("Unable to parse integer"))
+}
+
+fn verify_day(input: String) -> Result<(), String> {
+    let regex = Regex::new(r"^[01234MTWRF]$").unwrap();
+    if regex.is_match(input.as_str()) { Ok(()) }
+    else {Err(String::from("Must be one of: M, T, W, R, F, 0, 1, 2, 3, 4"))}
+}
