@@ -16,25 +16,27 @@ use clap::{SubCommand, Arg};
 use std::str::FromStr;
 use regex::Regex;
 use std::path::Path;
-use crate::actions::FindCourseInRoomAtTime;
+use crate::actions::{FindCourseInRoomAtTime, FindEmptyRooms};
 
 fn main() {
 
     let app = clap::App::new("whereisclass");
 
     let app = app
-        .subcommand(SubCommand::with_name("parsehtml")
+        .version("0.1.0")
+        .about("A toolkit to find out nifty information about the RPI master schedule.")
+        .subcommand(SubCommand::with_name("parsehtml").about("Parse an HTML file containing just a table of all classes formatted like SIS into JSON.")
             .arg(Arg::with_name("file").required(true).help("Sets the html file to read from, following the SIS Table format").validator(verify_exists))
             .arg(Arg::with_name("output").required(true).help("Sets the output JSON file")))
-        .subcommand(SubCommand::with_name("parsercos")
+        .subcommand(SubCommand::with_name("parsercos").about("Parse an RCOS XML file into JSON")
             .arg(Arg::with_name("file").required(true).help("Sets the html file to read from, following the SIS Table format").validator(verify_exists))
             .arg(Arg::with_name("output").required(true).help("Sets the output JSON file")))
-        .subcommand(SubCommand::with_name("find-course-in-room")
+        .subcommand(SubCommand::with_name("find-course-in-room").about("Determines which courses are being held in a given room at a given time")
             .arg(Arg::with_name("db").required(true).help("The JSON Course DB to scan").validator(verify_exists))
             .arg(Arg::with_name("room").required(true).help("The SIS room name"))
             .arg(Arg::with_name("time").required(true).help("The military time code").validator(verify_number))
             .arg(Arg::with_name("day").required(true).help("The day").validator(verify_day)))
-        .subcommand(SubCommand::with_name("empty-rooms")
+        .subcommand(SubCommand::with_name("empty-rooms").about("Find empty rooms for a given time range")
             .arg(Arg::with_name("db").required(true).help("The JSON Course DB to scan").validator(verify_exists))
             .arg(Arg::with_name("time-start").required(true).help("The start time").validator(verify_number))
             .arg(Arg::with_name("time-end").required(true).help("The end time").validator(verify_number))
@@ -80,7 +82,12 @@ fn load_db(db_file: &str) -> CourseDB {
 }
 
 fn empty_rooms(db_file: &str, time_start: &str, time_end: &str, day: &str) {
-    let db = load_db(db_file)
+    let db = load_db(db_file);
+    let empty = db.find_empty_rooms(time_start.parse().unwrap(), time_end.parse().unwrap(), Day::from(day));
+    println!("{} empty room{} found between {} and {}:\n", empty.len(), if empty.len() != 1 { "s" } else {""}, time_start, time_end );
+    for room in empty {
+        println!("{}", room);
+    }
 }
 
 fn find_course_in_room(db_file: &str, room: &str, time: &str, day: &str) {

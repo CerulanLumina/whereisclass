@@ -1,20 +1,26 @@
 use crate::models;
 use std::collections::HashSet;
 
+/// An extension trait to add finding course in room functionality
 pub trait FindCourseInRoomAtTime {
+    /// Find a course in a room at a given time instant.
     fn find_course_in_room_at_time(&self, room: &str, time: u16, day: models::Day) -> Vec<models::Course> {
         self.find_course_in_room_at_time_range(room, time, time, day)
     }
+    /// Find a course in a room for a given range
     fn find_course_in_room_at_time_range(&self, room: &str, time_start: u16, time_end: u16, day: models::Day) -> Vec<models::Course>;
 }
 
+/// A trait that allows for finding empty rooms for a given time range
 pub trait FindEmptyRooms {
+    /// Find empty rooms given a start time, and ending time, and a day
     fn find_empty_rooms(&self, time_start: u16, time_end: u16, day: models::Day) -> Vec<String>;
 }
 
 impl FindCourseInRoomAtTime for models::CourseDB {
     fn find_course_in_room_at_time_range(&self, room: &str, time_start: u16, time_end: u16, day: models::Day) -> Vec<models::Course> {
         let mut clash = Vec::new();
+        // Naive impl b/c lazy (whats dp lol)
         for course in &self.courses {
             for section in &course.sections {
                 for period in &section.periods {
@@ -48,9 +54,9 @@ impl FindEmptyRooms for models::CourseDB {
                 }
             }
         }
-        let mut valid = rooms.iter().cloned().filter(|room| {
-            self.find_course_in_room_at_time(room, time_start, day).len() == 0
-        }).collect::<Vec<String>>();
+        let mut valid = rooms.iter().filter(|room| {
+            self.find_course_in_room_at_time_range(room, time_start, time_end, day).len() == 0
+        }).map(|a| a.clone().clone()).collect::<Vec<_>>();
         valid.sort();
         valid
     }

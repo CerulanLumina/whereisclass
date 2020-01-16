@@ -1,3 +1,5 @@
+//! A monolithic block of code that handles parsing of an HTML SIS listing table.
+
 use crate::models::*;
 use scraper::{Html, Selector};
 use std::str::FromStr;

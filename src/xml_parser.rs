@@ -1,3 +1,5 @@
+//! A monolithic block of code that handles parsing of a ROCS xml file.
+
 use crate::models;
 use crate::roxmltree::{Document, Node};
 use std::num::ParseIntError;
