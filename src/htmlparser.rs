@@ -73,5 +73,6 @@ pub fn parse_html<S: AsRef<str>>(input: S) -> CourseDB {
 fn parse_time(s: &str) -> u16 {
     let pm = s.contains("pm");
     let pm_offset: u16 = if pm { 1200 } else { 0 };
-    u16::from_str(s.chars().filter(|c| c.is_ascii_digit()).collect::<String>().as_ref()).expect("Couldn't parse time") + pm_offset
+    let base = u16::from_str(s.chars().filter(|c| c.is_ascii_digit()).collect::<String>().as_ref()).expect("Couldn't parse time") + pm_offset;
+    if base >= 2400 { base - 1200 } else { base }
 }
