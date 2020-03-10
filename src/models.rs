@@ -36,7 +36,7 @@ pub struct Section {
     pub notes: Vec<String>,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Eq, Hash)]
 /// A (de)serializable period structure that defines when a section meets
 pub struct Period {
     /// The starting time - This should be in 24h military time `hhmm`.
@@ -58,7 +58,7 @@ pub struct Period {
     pub period_type: Option<PeriodType>,
 }
 
-#[derive(Copy, Clone, PartialEq, Debug, PartialOrd, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, PartialOrd, Serialize, Deserialize, Eq, Hash)]
 /// A (de)serializable enum that represents a weekday
 pub enum Day {
     Monday,
@@ -68,7 +68,7 @@ pub enum Day {
     Friday,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Eq, Hash)]
 /// A (de)serializable enum that represents a period type
 pub enum PeriodType {
     Lecture,
