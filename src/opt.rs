@@ -26,9 +26,7 @@ use crate::models::{Day, TimeCode};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-pub fn parse_args() -> AppWhereIsClass {
-    AppWhereIsClass::from_args()
-}
+pub fn parse_args() -> AppWhereIsClass { AppWhereIsClass::from_args() }
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "whereisclass")]

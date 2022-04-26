@@ -1,8 +1,10 @@
 use serde_derive::{Deserialize, Serialize};
-use std::fmt::{Debug, Display, Formatter};
-use std::num::ParseIntError;
-use std::ops::RangeInclusive;
-use std::str::FromStr;
+use std::{
+    fmt::{Debug, Display, Formatter},
+    num::ParseIntError,
+    ops::RangeInclusive,
+    str::FromStr,
+};
 
 const VALID_TIME_RANGE: RangeInclusive<u16> = 700..=2350;
 
@@ -82,14 +84,8 @@ pub struct TimeCode {
 }
 
 impl TimeCode {
-    pub fn time(&self) -> u16 {
-        self.time
-    }
-    pub unsafe fn new_from_int(time_code: u16) -> Self {
-        Self {
-            time: time_code,
-        }
-    }
+    pub fn time(&self) -> u16 { self.time }
+    pub unsafe fn new_from_int(time_code: u16) -> Self { Self { time: time_code } }
 }
 
 impl Display for TimeCode {
@@ -99,9 +95,7 @@ impl Display for TimeCode {
 }
 
 impl Into<u16> for TimeCode {
-    fn into(self) -> u16 {
-        self.time
-    }
+    fn into(self) -> u16 { self.time }
 }
 
 impl TryFrom<u16> for TimeCode {
@@ -195,7 +189,7 @@ impl FromStr for Day {
     }
 }
 
-pub struct DayParseError<>(String);
+pub struct DayParseError(String);
 
 impl Debug for DayParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -257,13 +251,9 @@ impl TimeCodeParseError {
         Self { input, kind }
     }
 
-    fn kind(&self) -> &TimeCodeParseErrorKind {
-        &self.kind
-    }
+    fn kind(&self) -> &TimeCodeParseErrorKind { &self.kind }
 
-    fn input(&self) -> &str {
-        self.input.as_str()
-    }
+    fn input(&self) -> &str { self.input.as_str() }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

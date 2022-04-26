@@ -1,13 +1,17 @@
 //! A monolithic block of code that handles parsing of an HTML SIS listing table.
 
-use std::fmt::{Display, Formatter};
-use std::num::ParseIntError;
-use crate::models::*;
-use scraper::{Html, Selector};
-use std::str::FromStr;
-use regex::Regex;
+use crate::{
+    models::*,
+    parser::{CourseDBParseError, CourseDBParser},
+};
 use lazy_static::lazy_static;
-use crate::parser::{CourseDBParseError, CourseDBParser};
+use regex::Regex;
+use scraper::{Html, Selector};
+use std::{
+    fmt::{Display, Formatter},
+    num::ParseIntError,
+    str::FromStr,
+};
 
 struct Selectors {
     pub tr: Selector,
@@ -21,10 +25,7 @@ lazy_static! {
             td: Selector::parse("td").unwrap(),
         }
     };
-
-    static ref DAY_REGEX: Regex = {
-        Regex::new(r"^[MTWRF]*$").unwrap()
-    };
+    static ref DAY_REGEX: Regex = { Regex::new(r"^[MTWRF]*$").unwrap() };
 }
 
 pub struct HtmlParser;
@@ -43,8 +44,6 @@ fn parse_html_lossy(input: &str) -> CourseDB {
     let fragment = input.replace("\n", "");
 
     let html = Html::parse_fragment(fragment.as_str());
-
-
 
     let mut last_course = 0usize;
 
@@ -90,7 +89,8 @@ fn parse_html_lossy(input: &str) -> CourseDB {
         let day_str = match tds[8]
             .text()
             .filter(|k| k != &"TBA" && DAY_REGEX.is_match(k))
-            .next() {
+            .next()
+        {
             Some(s) => s,
             None => {
                 continue;
@@ -151,7 +151,6 @@ fn parse_html_lossy(input: &str) -> CourseDB {
     db
 }
 
-
 fn try_parse_time_range(s: &str) -> Result<(TimeCode, TimeCode), CourseDBHTMLParseError> {
     let spls = s.split("-").collect::<Vec<_>>();
     if spls.len() == 2 {
@@ -168,21 +167,36 @@ fn try_parse_time(s: &str) -> Result<TimeCode, CourseDBHTMLParseError> {
         let pm = match spls[1] {
             "am" => Ok(false),
             "pm" => Ok(true),
-            _ => Err(CourseDBHTMLParseError::MalformedTime(MalformedTimeKind::MalformedAMPM))
+            _ => Err(CourseDBHTMLParseError::MalformedTime(
+                MalformedTimeKind::MalformedAMPM,
+            )),
         };
         pm.and_then(|pm| {
-            let time_cleaned = spls[0].chars().filter(|c| c.is_ascii_digit()).collect::<String>();
+            let time_cleaned = spls[0]
+                .chars()
+                .filter(|c| c.is_ascii_digit())
+                .collect::<String>();
             let initial_timecode = u16::from_str(time_cleaned.as_str())
                 .map_err(|err| CourseDBHTMLParseError::ParseIntErr(err));
             initial_timecode.map(|timecode| (pm, timecode))
         })
-            .and_then(|(pm, timecode)| {
-                let timecode = if pm && timecode < 1200 { timecode + 1200 } else { timecode };
-                TimeCode::try_from(timecode)
-                    .map_err(|err| CourseDBHTMLParseError::TimeCodeParseError(TimeCodeParseError::new(spls[0].into(), TimeCodeParseErrorKind::InvalidTime(err))))
+        .and_then(|(pm, timecode)| {
+            let timecode = if pm && timecode < 1200 {
+                timecode + 1200
+            } else {
+                timecode
+            };
+            TimeCode::try_from(timecode).map_err(|err| {
+                CourseDBHTMLParseError::TimeCodeParseError(TimeCodeParseError::new(
+                    spls[0].into(),
+                    TimeCodeParseErrorKind::InvalidTime(err),
+                ))
             })
+        })
     } else {
-        Err(CourseDBHTMLParseError::MalformedTime(MalformedTimeKind::MissingAMPM))
+        Err(CourseDBHTMLParseError::MalformedTime(
+            MalformedTimeKind::MissingAMPM,
+        ))
     }
 }
 

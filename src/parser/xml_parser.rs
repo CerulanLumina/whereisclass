@@ -1,10 +1,9 @@
 //! A monolithic block of code that handles parsing of a ROCS xml file.
 
-use whereisclass::models;
-use roxmltree::{Document, Node};
-use std::num::ParseIntError;
-use std::str::FromStr;
 use crate::{models, TimeCode};
+use roxmltree::{Document, Node};
+use std::{num::ParseIntError, str::FromStr};
+use whereisclass::models;
 
 fn parse_day(day: Node) -> Result<models::Day, CourseDBError> {
     models::Day::from_str(day.text()?).map_err(|a| a.into())
@@ -220,19 +219,13 @@ pub enum CourseDBError {
 impl std::error::Error for CourseDBError {}
 
 impl std::fmt::Display for CourseDBError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { write!(f, "{:?}", self) }
 }
 
 impl From<ParseIntError> for CourseDBError {
-    fn from(_: ParseIntError) -> Self {
-        Self::ParsingNum
-    }
+    fn from(_: ParseIntError) -> Self { Self::ParsingNum }
 }
 
 impl From<std::option::NoneError> for CourseDBError {
-    fn from(_: std::option::NoneError) -> Self {
-        Self::MissingValue
-    }
+    fn from(_: std::option::NoneError) -> Self { Self::MissingValue }
 }

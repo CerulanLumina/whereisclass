@@ -4,23 +4,24 @@ mod opt;
 
 mod parser;
 
-use std::fmt::{Display, Formatter};
-use std::fs::File;
-use std::io::{BufReader, Read};
-use crate::models::*;
-use crate::opt::{AppWhereIsClass, ParseArgs};
-use crate::parser::{CourseDBParseError, CourseDBParser};
-
+use crate::{
+    models::*,
+    opt::{AppWhereIsClass, ParseArgs},
+    parser::{CourseDBParseError, CourseDBParser},
+};
+use std::{
+    fmt::{Display, Formatter},
+    fs::File,
+    io::{BufReader, Read},
+};
 
 fn main() {
     let args = opt::parse_args();
 
     if let Err(err) = match args {
-        AppWhereIsClass::ParseHtml(args) => {
-            parse(args, parser::HtmlParser)
-        }
+        AppWhereIsClass::ParseHtml(args) => parse(args, parser::HtmlParser),
         #[cfg(feature = "rcosxml")]
-        AppWhereIsClass::ParseRcos(args) => {},
+        AppWhereIsClass::ParseRcos(args) => {}
         AppWhereIsClass::FindCourseInRoom {
             db,
             room,
@@ -28,7 +29,7 @@ fn main() {
             time,
         } => {
             unimplemented!()
-        },
+        }
         AppWhereIsClass::EmptyRooms {
             db,
             day,
@@ -40,7 +41,6 @@ fn main() {
     } {
         eprintln!("An error occurred.");
         eprintln!("{}", err);
-
     }
 }
 
@@ -58,15 +58,17 @@ impl Display for ApplicationError {
             Self::IOError(err) => write!(f, "IO Error: {}", err),
             Self::JsonSerializationError(err) => write!(f, "Error during JSON writing: {}", err),
             Self::ParseError(err) => write!(f, "Error during parsing: {}", err),
-            Self::OutputExists => write!(f, "Refusing to overwrite existing output file. Use --force to override."),
-            Self::InputDoesNotExist => write!(f, "Input file does not exist.")
+            Self::OutputExists => write!(
+                f,
+                "Refusing to overwrite existing output file. Use --force to override."
+            ),
+            Self::InputDoesNotExist => write!(f, "Input file does not exist."),
         }
     }
 }
 
 fn parse(parse_args: ParseArgs, parser: impl CourseDBParser) -> Result<(), ApplicationError> {
     if parse_args.file.exists() {
-
         if parse_args.force || !parse_args.output.exists() {
             let mut f = File::open(parse_args.file);
             f.map(|file| BufReader::new(file))
@@ -75,9 +77,20 @@ fn parse(parse_args: ParseArgs, parser: impl CourseDBParser) -> Result<(), Appli
                     reader.read_to_string(&mut content).map(|_| content)
                 })
                 .map_err(|err| ApplicationError::IOError(err))
-                .and_then(|content| parser.parse(content.as_str()).map_err(|err| ApplicationError::ParseError(err)))
-                .and_then(|db| File::create(parse_args.output.as_path()).map_err(|err| ApplicationError::IOError(err)).map(|file| (db, file)))
-                .and_then(|(db, file)| serde_json::to_writer(file, &db).map_err(|err| ApplicationError::JsonSerializationError(err)))
+                .and_then(|content| {
+                    parser
+                        .parse(content.as_str())
+                        .map_err(|err| ApplicationError::ParseError(err))
+                })
+                .and_then(|db| {
+                    File::create(parse_args.output.as_path())
+                        .map_err(|err| ApplicationError::IOError(err))
+                        .map(|file| (db, file))
+                })
+                .and_then(|(db, file)| {
+                    serde_json::to_writer(file, &db)
+                        .map_err(|err| ApplicationError::JsonSerializationError(err))
+                })
         } else {
             Err(ApplicationError::OutputExists)
         }
